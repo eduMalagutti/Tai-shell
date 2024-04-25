@@ -50,7 +50,7 @@ int main()
         while (1)
         {
             argc++;
-            argv[argc] = strtok(NULL, " ");
+            argv[argc] = strtok(NULL, " "); //argv vai ser um vetor de strings guardando todos os argumentos
             if (argv[argc] == NULL)
             {
                 //argv = (char **)realloc(argv, (argc + 1) * sizeof(char *));
@@ -59,17 +59,17 @@ int main()
             }
         }
 
-        if (strcmp(argv[0], "exit") == 0)
+        if (strcmp(argv[0], "exit") == 0) //Se o comando for exit
         {
             exit(0);
         }
-        else if (strcmp(argv[0], "cd") == 0)
+        else if (strcmp(argv[0], "cd") == 0) //Se o comando for cd
         {
             exec_cd(argv[1]);
         }
-        else
+        else // Se o comando for para executar um prog ou um commando: ls, ps, sleep e outros
         {
-            exec_Child(argc, argv);
+            exec_Child(argc, argv); 
         }
 
         // // Debug
@@ -150,8 +150,6 @@ void exec_Child(int argc, char **argv)
 
     pid = fork();
 
-    setpgid(0, 0);
-
     if (pid == -1)
     {
         perror("Erro na criação de processo");
@@ -188,7 +186,7 @@ void exec_Child(int argc, char **argv)
 int exec_BuiltinCmds(char **argv)
 {
     int NumberOfCmds = 5;
-    char cmds[6][5] = {"ls", "ps", "echo", "jobs", "clear"};
+    char cmds[4][5] = {"ls", "ps", "echo"};
 
     int ok = 0;
 
