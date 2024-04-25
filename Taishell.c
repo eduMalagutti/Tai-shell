@@ -10,11 +10,12 @@
 #include <signal.h>
 
 #define MAX_ARGC 10
-#define MAX_ARGS_SIZE 20
+#define MAX_ARGV_SIZE 20
 
-void exec_Child(int argc, char **argv); // Função para executar programa
-int exec_BuiltinCmds(char **argv);
-int exec_cd(char *arg);
+//Declaração das funções
+void exec_Child(int argc, char **argv, int isComand);
+int exec_cd(char *argv);
+void exec_comand(int argc, char **argv);
 
 int main()
 {
@@ -24,7 +25,7 @@ int main()
     char **argv = (char **)malloc(MAX_ARGC * sizeof(char *));
     for (int i = 0; i < MAX_ARGC; i++)
     {
-        argv[i] = (char *)malloc(MAX_ARGS_SIZE * sizeof(char));
+        argv[i] = (char *)malloc(MAX_ARGV_SIZE * sizeof(char));
     }
 
     while (1)
@@ -39,37 +40,36 @@ int main()
 
         // colourize command line
         // \033[1;34minsert text here\033[0m
+        // \033[1;35mTaishell:\033[0m
         // Reading command line
-        printf("Taishell:\033[1;34m~%s\033[0m$ ", cwd);
+        printf("\033[1;35mTaishell:\033[0m\033[1;34m~%s\033[0m$ ", cwd);
         fgets(cmdline, 50, stdin);
         cmdline[strlen(cmdline) - 1] = '\0';
 
+        //Argc = Contador de argumentos
         argc = 0;
         argv[argc] = strtok(cmdline, " ");
 
         while (1)
         {
             argc++;
-            argv[argc] = strtok(NULL, " "); //argv vai ser um vetor de strings guardando todos os argumentos
+            argv[argc] = strtok(NULL, " "); // argv vai ser um vetor de strings guardando todos os argumentos
             if (argv[argc] == NULL)
             {
-                //argv = (char **)realloc(argv, (argc + 1) * sizeof(char *));
-                argv[argc] = '\0';
+                // argv = (char **)realloc(argv, (argc + 1) * sizeof(char *));
                 break;
             }
         }
 
-        if (strcmp(argv[0], "exit") == 0) //Se o comando for exit
+        // Condição para que o comando seja um builtin comand
+        int isCommand = (argv[0][0] != '.') && (argv[0][1] != '/');
+        if (isCommand)
         {
-            exit(0);
+            exec_comand(argc, argv);
         }
-        else if (strcmp(argv[0], "cd") == 0) //Se o comando for cd
+        else
         {
-            exec_cd(argv[1]);
-        }
-        else // Se o comando for para executar um prog ou um commando: ls, ps, sleep e outros
-        {
-            exec_Child(argc, argv); 
+            exec_Child(argc, argv, isCommand);
         }
 
         // // Debug
@@ -78,12 +78,50 @@ int main()
         //     printf("argv[%d] = %s\n", i, argv[i]);
         // }
     }
-
     free(argv);
     return 0;
 }
 
-int exec_cd(char *arg)
+void exec_Child(int argc, char **argv, int isComand)
+{
+    // Child variables
+    pid_t pid;
+    int status;
+
+    // signal(SIGCHLD, handleChildExit);
+
+    pid = fork();
+
+    if (pid == -1)
+    {
+        perror("Erro na criação de processo");
+        exit(1);
+    }
+
+    if (pid == 0) // Child: ls, cd, echo or not bultin
+    {
+        if (isComand)
+        {
+            execvp(argv[0], argv);
+        }
+        else
+        {
+            execv(argv[0], argv);
+        }
+    }
+    else // Parent
+    {
+        if (strcmp(argv[argc - 1], "&") == 0) // Run child in background
+        {
+        }
+        else // Run child in foreground
+        {
+            wait(&status);
+        }
+    }
+}
+
+int exec_cd(char *argv)
 {
     char lastdir[PATH_MAX]; // Initialized to zero
     char curdir[PATH_MAX];
@@ -95,37 +133,37 @@ int exec_cd(char *arg)
         *curdir = '\0';
     }
 
-    if (arg == NULL)
+    if (argv == NULL)
     {
-        arg = getenv("HOME");
+        argv = getenv("HOME");
     }
-    else if (!strcmp(arg, "-"))
+    else if (!strcmp(argv, "-"))
     {
         if (*lastdir == '\0')
         {
             fprintf(stderr, "No previous directory\n");
             return 1;
         }
-        arg = lastdir;
+        argv = lastdir;
     }
-    else if (*arg == '~')
+    else if (*argv == '~')
     {
-        if (arg[1] == '/' || arg[1] == '\0')
+        if (argv[1] == '/' || argv[1] == '\0')
         {
-            snprintf(path, sizeof path, "%s%s", getenv("HOME"), arg + 1);
-            arg = path;
+            snprintf(path, sizeof path, "%s%s", getenv("HOME"), argv + 1);
+            argv = path;
         }
         else
         {
             // Handle ~name (expand to user's home directory)
-            fprintf(stderr, "Syntax not supported: %s\n", arg);
+            fprintf(stderr, "Syntax not supported: %s\n", argv);
             return 1;
         }
     }
 
-    if (chdir(arg))
+    if (chdir(argv))
     {
-        fprintf(stderr, "%s: %s: %s\n", arg, strerror(errno), path);
+        fprintf(stderr, "%s: %s: %s\n", argv, strerror(errno), path);
         return 1;
     }
 
@@ -134,91 +172,20 @@ int exec_cd(char *arg)
     return 0;
 }
 
-void handleChildExit(int signum)
+void exec_comand(int argc, char **argv)
 {
-    // Reap the child process
-    wait(NULL);
-}
+    int isCommand = 1;
 
-void exec_Child(int argc, char **argv)
-{
-    // Child variables
-    pid_t pid;
-    int status;
-
-    signal(SIGCHLD, handleChildExit);
-
-    pid = fork();
-
-    if (pid == -1)
+    if (strcmp(argv[0], "exit") == 0) // Se o comando for exit
     {
-        perror("Erro na criação de processo");
-        exit(1);
+        exit(0);
     }
-
-    // Condição para que o comando seja um builtin comand
-    int StdPath = (argv[0][0] != '.') && (argv[0][1] != '/');
-
-    if (pid == 0) // Child: ls, cd, echo or not bultin
+    else if (strcmp(argv[0], "cd") == 0) // Se o comando for cd
     {
-        if (StdPath)
-        {
-            exec_BuiltinCmds(argv);
-        }
-        else
-        {
-            execv(argv[0], argv);
-        }
-    }
-    else // Parent
-    {
-        if (strcmp(argv[argc - 1], "&") == 0) // Run child in background
-        {
-            printf("%d\n", getpid());
-        }
-        else // Run child in foreground
-        {
-            wait(&status);
-        }
-    }
-}
-
-int exec_BuiltinCmds(char **argv)
-{
-    int NumberOfCmds = 5;
-    char cmds[4][5] = {"ls", "ps", "echo"};
-
-    int ok = 0;
-
-    if (strcmp(argv[0], "exit") == 0)
-    {
-        ok = 1;
-        printf("Era pra ter saido\n");
-        exit(EXIT_SUCCESS);
+        exec_cd(argv[1]);
     }
     else
     {
-        for (int i = 0; i < NumberOfCmds; i++)
-        {
-            if (strcmp(argv[0], cmds[i]) == 0)
-            {
-                execvp(argv[0], argv);
-                ok = 1;
-                return 0;
-            }
-            if (strcmp(argv[0], "sleep") == 0)
-            {
-                sleep(atoi(argv[1]));
-                ok = 1;
-                exit(0);
-                return 0;
-            }
-        }
-    }
-
-    if (!ok)
-    {
-        fprintf(stderr, "%s: command not found\n", argv[0]);
-        return -1;
+        exec_Child(argc,argv,isCommand);
     }
 }
