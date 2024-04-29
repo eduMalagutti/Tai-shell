@@ -9,25 +9,42 @@
 #include <errno.h>
 #include <signal.h>
 
+#define MAX_COMMAND_LINE 50
+#define MAX_ARGV_SIZE 50
+#define MAX_ARG_SIZE 50
 
-#define MAX_ARGC 10
-#define MAX_ARGV_SIZE 20
-
-//Declaração das funções
-void exec_Child(int argc, char **argv, int isComand);
+// Declaração das funções
+void exec_Child(int argc, char **argv);
 int exec_cd(char *argv);
-void exec_comand(int argc, char **argv);
+
+void handler(int signal)
+{
+    int status;
+    while (waitpid(0, &status, WNOHANG) > 0)
+        ;
+}
 
 int main()
 {
-    // Command line
-    char cmdline[50];
-    int argc = 0;
-    char **argv = (char **)malloc(MAX_ARGC * sizeof(char *));
-    for (int i = 0; i < MAX_ARGC; i++)
+    // Strings para a linha de comando
+    char cmdline[MAX_COMMAND_LINE];
+
+    char *argv[MAX_ARGV_SIZE];
+    for (int i = 0; i < MAX_ARGV_SIZE; i++)
     {
-        argv[i] = (char *)malloc(MAX_ARGV_SIZE * sizeof(char));
+        argv[i] = (char *)malloc(MAX_ARG_SIZE * sizeof(char));
+        if (argv[i] == NULL)
+        {
+            perror("Erro de alocação de memória\n");
+            return 1;
+        }
     }
+
+    // Argc = Contador de argumentos
+    int argc = 0;
+
+    // Variáveis de condição, vão ser usadas para implementar > e |
+    int isPipe, isRedirection_in, isRedirection_out;
 
     while (1)
     {
@@ -39,57 +56,70 @@ int main()
             return 1;
         }
 
-        // colourize command line
-        // \033[1;34minsert text here\033[0m
-        // \033[1;35mTaishell:\033[0m
-        // Reading command line
+        // Printando o prompt
+        // \033[1;34mtexto colorido aqui\033[0m
+        // Lendo linha de comando
         printf("\033[1;35mTaishell:\033[0m\033[1;34m~%s\033[0m$ ", cwd);
+        fflush(stdout);
         fgets(cmdline, 50, stdin);
+
+        // Removendo caracter \n do final da linha
         cmdline[strlen(cmdline) - 1] = '\0';
 
-        //Argc = Contador de argumentos
-        argc = 0;
-        argv[argc] = strtok(cmdline, " ");
+        // Estrutura para criação de um vetor argv com todos os argumantos do comando lido
+        // Argc inicializado com 0
+        argv[0] = strtok(cmdline, " ");
 
-        while (1)
+        while (argv[argc] != NULL)
         {
-            argc++;
-            argv[argc] = strtok(NULL, " "); // argv vai ser um vetor de strings guardando todos os argumentos
-            if (argv[argc] == NULL)
-            {
-                // argv = (char **)realloc(argv, (argc + 1) * sizeof(char *));
-                break;
-            }
+            argv[++argc] = strtok(NULL, " "); // argv vai ser um vetor de strings guardando todos os argumentos
+
+            if (argv[argc] == "<")
+                isRedirection_in = 1;
+            if (argv[argc] == ">")
+                isRedirection_out = 1;
         }
 
-        // Condição para que o comando seja um builtin comand
-        int isCommand = (argv[0][0] != '.') && (argv[0][1] != '/');
-        if (isCommand)
+        argv[argc] == NULL;
+
+        // Verfificando se nada foi digitado
+        if (strcmp(argv[0], "\0") == 0)
+            continue;
+
+        // Verificando comando exit
+        if (strcmp(argv[0], "exit") == 0)
         {
-            exec_comand(argc, argv);
-        }
-        else
-        {
-            exec_Child(argc, argv, isCommand);
+            break;
         }
 
-        // // Debug
+        // Verifiando comando cd
+        if (strcmp(argv[0], "cd") == 0)
+        {
+            exec_cd(argv[1]);
+            continue;
+        }
+
+        // Chamando função que executa um comando e cria um processo filho
+        exec_Child(argc, argv);
+
+        // // Para debug
         // for (int i = 0; i < argc + 1; i++)
         // {
         //     printf("argv[%d] = %s\n", i, argv[i]);
         // }
     }
-    free(argv);
     return 0;
 }
 
-void exec_Child(int argc, char **argv, int isComand)
+void exec_Child(int argc, char **argv)
 {
     // Child variables
     pid_t pid;
     int status;
+    int issleep, isbackground;
 
-    // signal(SIGCHLD, handleChildExit);
+    issleep = strcmp(argv[0], "sleep") == 0;
+    isbackground = strcmp(argv[argc - 1], "&") == 0;
 
     pid = fork();
 
@@ -99,27 +129,38 @@ void exec_Child(int argc, char **argv, int isComand)
         exit(1);
     }
 
-    if (pid == 0) // Child: ls, cd, echo or not bultin
+    if (pid == 0) // Filho
     {
-        if (isComand)
+        // Por problemas ao rodar sleep pelo execvp, criei uma estrutura para sleep separadamente
+        if (issleep)
         {
-            execvp(argv[0], argv);
+            sleep(atoi(argv[1]));
+            exit(1);
         }
-        else
+        if (execvp(argv[0], argv) == -1)
         {
-            execv(argv[0], argv);
+            perror("Erro");
+            fflush(stderr);
         }
+        exit(1);
     }
-    else // Parent
+    else // Pai
     {
-        if (strcmp(argv[argc - 1], "&") == 0) // Run child in background
+        if (isbackground) // Chamada de background
         {
             signal(SIGCHLD, handler);
         }
-        else // Run child in foreground
+        else // Chamada em foreground
         {
             wait(&status);
         }
+
+        // Liberando espaço de memória
+        for (int i = 0; i < argc; i++)
+        {
+            free(argv[i]);
+        }
+        free(argv);
     }
 }
 
@@ -172,27 +213,4 @@ int exec_cd(char *argv)
     // Update last directory
     strcpy(lastdir, curdir);
     return 0;
-}
-
-void exec_comand(int argc, char **argv)
-{
-    int isCommand = 1;
-
-    if (strcmp(argv[0], "exit") == 0) // Se o comando for exit
-    {
-        exit(0);
-    }
-    else if (strcmp(argv[0], "cd") == 0) // Se o comando for cd
-    {
-        exec_cd(argv[1]);
-    }
-    else
-    {
-        exec_Child(argc,argv,isCommand);
-    }
-}
-
-void handler(int signal){
-    int status;
-    while(waitpid(0, &status, WNOHANG) > 0);
 }
