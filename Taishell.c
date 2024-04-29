@@ -69,11 +69,11 @@ int main()
         // Estrutura para criação de um vetor argv com todos os argumantos do comando lido
         // argc inicializado com 0
         argv[argc] = strtok(cmdline, " ");
-        while (argv[argc] != NULL)
+        while (argv[argc] != NULL && argc < MAX_ARGV_SIZE - 1)
         {
             argv[++argc] = strtok(NULL, " "); // argv vai ser um vetor de strings guardando todos os argumentos
         }
-        // argv[argc] == NULL;
+        argv[argc] = NULL;
 
         // Verificando comando exit
         if (strcmp(argv[0], "exit") == 0)
@@ -90,12 +90,6 @@ int main()
 
         // Chamando função que executa um comando e cria um processo filho
         exec_Child(argc, argv);
-
-        // // Para debug
-        // for (int i = 0; i < argc + 1; i++)
-        // {
-        //     printf("argv[%d] = %s\n", i, argv[i]);
-        // }
     }
     return 0;
 }
