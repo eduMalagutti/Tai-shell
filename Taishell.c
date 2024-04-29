@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <signal.h>
 
+
 #define MAX_ARGC 10
 #define MAX_ARGV_SIZE 20
 
@@ -113,6 +114,7 @@ void exec_Child(int argc, char **argv, int isComand)
     {
         if (strcmp(argv[argc - 1], "&") == 0) // Run child in background
         {
+            signal(SIGCHLD, handler);
         }
         else // Run child in foreground
         {
@@ -188,4 +190,9 @@ void exec_comand(int argc, char **argv)
     {
         exec_Child(argc,argv,isCommand);
     }
+}
+
+void handler(int signal){
+    int status;
+    while(waitpid(0, &status, WNOHANG) > 0);
 }
