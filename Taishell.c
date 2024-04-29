@@ -16,38 +16,32 @@
 // Declaração das funções
 void exec_Child(int argc, char **argv);
 int exec_cd(char *argv);
-
-void handler(int signal)
-{
-    int status;
-    while (waitpid(0, &status, WNOHANG) > 0)
-        ;
-}
+void handler(int signal);
 
 int main()
 {
-    // Strings para a linha de comando
-    char cmdline[MAX_COMMAND_LINE];
-
-    char *argv[MAX_ARGV_SIZE];
-    for (int i = 0; i < MAX_ARGV_SIZE; i++)
-    {
-        argv[i] = (char *)malloc(MAX_ARG_SIZE * sizeof(char));
-        if (argv[i] == NULL)
-        {
-            perror("Erro de alocação de memória\n");
-            return 1;
-        }
-    }
-
-    // Argc = Contador de argumentos
-    int argc = 0;
-
-    // Variáveis de condição, vão ser usadas para implementar > e |
-    int isPipe, isRedirection_in, isRedirection_out;
-
     while (1)
     {
+        // Strings para a linha de comando
+        char cmdline[MAX_COMMAND_LINE];
+
+        char *argv[MAX_ARGV_SIZE];
+        for (int i = 0; i < MAX_ARGV_SIZE; i++)
+        {
+            argv[i] = (char *)malloc(MAX_ARG_SIZE * sizeof(char));
+            if (argv[i] == NULL)
+            {
+                perror("Erro de alocação de memória\n");
+                return 1;
+            }
+        }
+
+        // Argc = Contador de argumentos
+        int argc = 0;
+
+        // Variáveis de condição, vão ser usadas para implementar > e |
+        int isPipe, isRedirection_in, isRedirection_out;
+
         // Finding current directory
         char cwd[PATH_MAX];
         if (getcwd(cwd, sizeof(cwd)) == NULL) // salva em cwb o path atual
@@ -63,28 +57,23 @@ int main()
         fflush(stdout);
         fgets(cmdline, 50, stdin);
 
+        // Verfificando se nada foi digitado
+        if (strcmp(cmdline, "\n") == 0)
+        {
+            continue;
+        }
+
         // Removendo caracter \n do final da linha
         cmdline[strlen(cmdline) - 1] = '\0';
 
         // Estrutura para criação de um vetor argv com todos os argumantos do comando lido
-        // Argc inicializado com 0
-        argv[0] = strtok(cmdline, " ");
-
+        // argc inicializado com 0
+        argv[argc] = strtok(cmdline, " ");
         while (argv[argc] != NULL)
         {
             argv[++argc] = strtok(NULL, " "); // argv vai ser um vetor de strings guardando todos os argumentos
-
-            if (argv[argc] == "<")
-                isRedirection_in = 1;
-            if (argv[argc] == ">")
-                isRedirection_out = 1;
         }
-
-        argv[argc] == NULL;
-
-        // Verfificando se nada foi digitado
-        if (strcmp(argv[0], "\0") == 0)
-            continue;
+        // argv[argc] == NULL;
 
         // Verificando comando exit
         if (strcmp(argv[0], "exit") == 0)
@@ -111,6 +100,13 @@ int main()
     return 0;
 }
 
+void handler(int signal)
+{
+    int status;
+    while (waitpid(0, &status, WNOHANG) > 0)
+        ;
+}
+
 void exec_Child(int argc, char **argv)
 {
     // Child variables
@@ -135,7 +131,8 @@ void exec_Child(int argc, char **argv)
         if (issleep)
         {
             sleep(atoi(argv[1]));
-            exit(1);
+            exit(0);
+            return;
         }
         if (execvp(argv[0], argv) == -1)
         {
