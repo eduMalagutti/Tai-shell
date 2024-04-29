@@ -154,13 +154,6 @@ void exec_Child(int argc, char **argv)
         {
             wait(&status);
         }
-
-        // Liberando espaço de memória
-        for (int i = 0; i < argc; i++)
-        {
-            free(argv[i]);
-        }
-        free(argv);
     }
 }
 
