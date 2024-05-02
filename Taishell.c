@@ -8,13 +8,16 @@
 #include <linux/limits.h>
 #include <errno.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define MAX_COMMAND_LINE 50
 #define MAX_ARGV_SIZE 50
 #define MAX_ARG_SIZE 50
 
 // Declaração das funções
-void exec_Child(int argc, char **argv);
+void exec_Child(int argc, char **argv, int redirectionIndex);
 int exec_cd(char *argv);
 void handler(int signal);
 
@@ -22,6 +25,9 @@ int main()
 {
     while (1)
     {
+        // Variavel para redirecionamento de output
+        int redirectionIndex = -1;
+
         // Strings para a linha de comando
         char cmdline[MAX_COMMAND_LINE];
 
@@ -38,9 +44,6 @@ int main()
 
         // Argc = Contador de argumentos
         int argc = 0;
-
-        // Variáveis de condição, vão ser usadas para implementar > e |
-        int isPipe, isRedirection_in, isRedirection_out;
 
         // Finding current directory
         char cwd[PATH_MAX];
@@ -71,6 +74,10 @@ int main()
         argv[argc] = strtok(cmdline, " ");
         while (argv[argc] != NULL && argc < MAX_ARGV_SIZE - 1)
         {
+            if (strcmp(argv[argc], ">") == 0)
+            {
+                redirectionIndex = argc;
+            }
             argv[++argc] = strtok(NULL, " "); // argv vai ser um vetor de strings guardando todos os argumentos
         }
         argv[argc] = NULL;
@@ -88,8 +95,8 @@ int main()
             continue;
         }
 
-        // Chamando função que executa um comando e cria um processo filho
-        exec_Child(argc, argv);
+        // Chamando função que cria um processo filho e executa o comando
+        exec_Child(argc, argv, redirectionIndex);
     }
     return 0;
 }
@@ -101,15 +108,20 @@ void handler(int signal)
         ;
 }
 
-void exec_Child(int argc, char **argv)
+void exec_Child(int argc, char **argv, int redirectionIndex)
 {
-    // Child variables
+    // Instanciação de variaveis
     pid_t pid;
     int status;
-    int issleep, isbackground;
+    char *outFile;
 
+    // Variaveis de condição
+    int issleep, isbackground;
     issleep = strcmp(argv[0], "sleep") == 0;
     isbackground = strcmp(argv[argc - 1], "&") == 0;
+
+    // Variáveis de condição, vão ser usadas para implementar > e |
+    int pipe_flag = 0;
 
     pid = fork();
 
@@ -121,6 +133,24 @@ void exec_Child(int argc, char **argv)
 
     if (pid == 0) // Filho
     {
+
+        // Se o carcter > for encontrado será feito um redirecionamento
+        if (redirectionIndex > 0)
+        {
+            outFile = argv[redirectionIndex + 1];
+            argv[redirectionIndex] = NULL;
+            argv[redirectionIndex + 1] = NULL;
+
+            int fd = open(outFile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (fd == -1)
+            {
+                perror("Failed to open output file");
+                return;
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
+
         // Por problemas ao rodar sleep pelo execvp, criei uma estrutura para sleep separadamente
         if (issleep)
         {
@@ -130,7 +160,7 @@ void exec_Child(int argc, char **argv)
         }
         if (execvp(argv[0], argv) == -1)
         {
-            perror("Erro");
+            perror("error");
             fflush(stderr);
         }
         exit(1);
@@ -164,7 +194,7 @@ int exec_cd(char *argv)
     {
         argv = getenv("HOME");
     }
-    else if (!strcmp(argv, "-"))
+    else if (strcmp(argv, "-") == 0)
     {
         if (*lastdir == '\0')
         {
