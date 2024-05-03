@@ -8,13 +8,16 @@
 #include <linux/limits.h>
 #include <errno.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define MAX_COMMAND_LINE 50
 #define MAX_ARGV_SIZE 50
 #define MAX_ARG_SIZE 50
 
 // Declaração das funções
-void exec_Child(int argc, char **argv);
+void exec_Child(int argc, char **argv, int redirectionIndex, int pipeIndex);
 int exec_cd(char *argv);
 void handler(int signal);
 
@@ -22,6 +25,7 @@ int main()
 {
     while (1)
     {
+
         // Strings para a linha de comando
         char cmdline[MAX_COMMAND_LINE];
 
@@ -39,8 +43,12 @@ int main()
         // Argc = Contador de argumentos
         int argc = 0;
 
-        // Variáveis de condição, vão ser usadas para implementar > e |
-        int isPipe, isRedirection_in, isRedirection_out;
+        // Variaveis para redirecionamento de output e pipe
+        int isRedirection = (strcmp(argv[argc], ">") == 0);
+        int isPipe = (strcmp(argv[argc], "|") == 0);
+
+        int redirectionIndex = -1;
+        int pipeIndex = -1;
 
         // Finding current directory
         char cwd[PATH_MAX];
@@ -71,7 +79,17 @@ int main()
         argv[argc] = strtok(cmdline, " ");
         while (argv[argc] != NULL && argc < MAX_ARGV_SIZE - 1)
         {
-            argv[++argc] = strtok(NULL, " "); // argv vai ser um vetor de strings guardando todos os argumentos
+            if (strcmp(argv[argc], ">") == 0)
+            {
+                redirectionIndex = argc;
+            }
+            if (strcmp(argv[argc], "|") == 0)
+            {
+                pipeIndex = argc;
+            }
+
+            // argv vai ser um vetor de strings guardando todos os argumentos
+            argv[++argc] = strtok(NULL, " ");
         }
         argv[argc] = NULL;
 
@@ -88,8 +106,8 @@ int main()
             continue;
         }
 
-        // Chamando função que executa um comando e cria um processo filho
-        exec_Child(argc, argv);
+        // Chamando função que cria um processo filho e executa o comando
+        exec_Child(argc, argv, redirectionIndex, pipeIndex);
     }
     return 0;
 }
@@ -101,26 +119,126 @@ void handler(int signal)
         ;
 }
 
-void exec_Child(int argc, char **argv)
+void exec_Child(int argc, char **argv, int redirectionIndex, int pipeIndex)
 {
-    // Child variables
-    pid_t pid;
+    // Instanciação de variaveis
+    pid_t result;
     int status;
-    int issleep, isbackground;
+    char *outFile;
 
+    // Variaveis de condição
+    int issleep, isbackground;
     issleep = strcmp(argv[0], "sleep") == 0;
     isbackground = strcmp(argv[argc - 1], "&") == 0;
 
-    pid = fork();
+    // Criando processo filho
+    result = fork();
 
-    if (pid == -1)
+    if (result == -1)
     {
         perror("Erro na criação de processo");
         exit(1);
     }
 
-    if (pid == 0) // Filho
+    if (result == 0) // Filho
     {
+        // Se o caracter "|" foi encontrado será feito um pipe
+        if (pipeIndex > 0)
+        {
+            // Array de descritores de arquivo
+            int pipe_fds[2];
+
+            // Criando os dois descritores de arquivo com a função pipe
+            // pipe_fds[0] será lido
+            // pipe_fds[1] será escrito
+            int erroPipe = pipe(pipe_fds);
+            if (erroPipe == -1)
+            {
+                perror("pipe");
+                exit(1);
+            }
+
+            // Criação do segundo processo
+            pid_t result2 = fork();
+
+            if (result2 == -1)
+            {
+                perror("Erro na criação de processo");
+                exit(1);
+            }
+
+            if (result2 == 0) // Processo 2
+            {
+                // Fechando o descritor de arquivo que não será usado
+                close(pipe_fds[1]);
+
+                // Mudando o descritor de arquivo padrão
+                dup2(pipe_fds[0], STDIN_FILENO);
+
+                // Criando argv para o segundo processo
+                char *argv2[MAX_ARGV_SIZE];
+                for (int i = 0; i < (MAX_ARGV_SIZE - pipeIndex); i++)
+                {
+                    argv[i] = (char *)malloc(MAX_ARG_SIZE * sizeof(char));
+                    if (argv[i] == NULL)
+                    {
+                        perror("Erro de alocação de memória\n");
+                        exit(1);
+                    }
+                }
+
+                // Copiando os valores para argv2
+                for (int i = pipeIndex + 1; i < argc; i++)
+                {
+                    strcpy(argv[i], argv[i]);
+                }
+
+                int erroExec = execvp(argv2[0], argv2);
+
+                if (erroExec == -1)
+                {
+                    perror("error");
+                    fflush(stderr);
+                }
+                exit(1);
+            }
+            else // Processo 1
+            {
+                // Fechando o descritor de arquivo que não será usado
+                close(pipe_fds[0]);
+
+                // Mudando o descritor de arquivo padrão
+                dup2(pipe_fds[1], STDOUT_FILENO);
+
+                int erroExec = execvp(argv[0], argv);
+
+                if (erroExec == -1)
+                {
+                    perror("error");
+                    fflush(stderr);
+                }
+                exit(1);
+            }
+        }
+        // Se chegar aqui não tem pipe
+
+        // Se o carcter > for encontrado será feito um redirecionamento
+        if (redirectionIndex > 0)
+        {
+            outFile = argv[redirectionIndex + 1];
+            argv[redirectionIndex] = NULL;
+            argv[redirectionIndex + 1] = NULL;
+
+            int fd = open(outFile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (fd == -1)
+            {
+                perror("Failed to open output file");
+                return;
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+        }
+
         // Por problemas ao rodar sleep pelo execvp, criei uma estrutura para sleep separadamente
         if (issleep)
         {
@@ -128,9 +246,13 @@ void exec_Child(int argc, char **argv)
             exit(0);
             return;
         }
-        if (execvp(argv[0], argv) == -1)
+
+        // Executando processo filho sem pipe
+        int erroExec = execvp(argv[0], argv);
+
+        if (erroExec == -1)
         {
-            perror("Erro");
+            perror("error");
             fflush(stderr);
         }
         exit(1);
@@ -164,7 +286,7 @@ int exec_cd(char *argv)
     {
         argv = getenv("HOME");
     }
-    else if (!strcmp(argv, "-"))
+    else if (strcmp(argv, "-") == 0)
     {
         if (*lastdir == '\0')
         {
