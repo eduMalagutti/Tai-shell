@@ -25,13 +25,14 @@ int main()
 {
     // Variável para guardar o valor do ultimo diretório acessado inicializando com null
     char lastdir[PATH_MAX];
+    memset(lastdir, '\0', sizeof(lastdir));
 
     while (1)
     {
         // Strings para a linha de comando
         char cmdline[MAX_COMMAND_LINE];
 
-        char *argv[MAX_ARGV_SIZE];
+        char **argv = (char**)malloc(MAX_ARGV_SIZE*sizeof(char*));
         for (int i = 0; i < MAX_ARGV_SIZE; i++)
         {
             argv[i] = (char *)malloc(MAX_ARG_SIZE * sizeof(char));
@@ -51,6 +52,7 @@ int main()
 
         // Variável de diretório cwd: Current Working Directory
         char cwd[PATH_MAX];
+        memset(cwd, '\0', sizeof(cwd));
 
         // Atualizando o ultimo diretorio acessado
         strcpy(lastdir, cwd);
@@ -72,6 +74,7 @@ int main()
         // Verfificando se nada foi digitado
         if (strcmp(cmdline, "\n") == 0)
         {
+            free(argv);
             continue;
         }
 
@@ -99,7 +102,8 @@ int main()
 
         // Verificando comando exit
         if (strcmp(argv[0], "exit") == 0)
-        {
+        {   
+            free(argv);
             break;
         }
 
@@ -107,16 +111,13 @@ int main()
         if (strcmp(argv[0], "cd") == 0)
         {
             exec_cd(argv[1], lastdir);
+            free(argv);
             continue;
         }
 
         // Chamando função que cria um processo filho e executa o comando
         exec_command(argc, argv, redirectionIndex, pipeIndex);
 
-        for (int i = 0; i < MAX_ARGV_SIZE; i++)
-        {
-            free(argv[i]);
-        }
         free(argv);
     }
     return 0;
@@ -256,7 +257,7 @@ int exec_command(int argc, char **argv, int redirectionIndex, int pipeIndex)
         int erroExec = execvp(argv[0], argv);
         if (erroExec == -1)
         {
-            perror("execvp");
+            fprintf(stderr,"%s: No such file or directory\n", argv[0]);
             exit(1);
         }
     }
@@ -299,7 +300,7 @@ int exec_cd(char *argv, char *lastdir)
         {
             // Se o diretório anterior não estiver disponível, exibe uma mensagem de erro
             fprintf(stderr, "Nenhum diretório anterior disponível\n");
-            return 1; // Retorna 1 para indicar um erro
+            return 1;
         }
         argv = lastdir; // Define o diretório anterior como o destino
     }
