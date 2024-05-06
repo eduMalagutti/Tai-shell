@@ -1,3 +1,9 @@
+/*
+    Alunos:
+    Eduardo Souza Malagutti 820649
+    Vitor Taichi Taira 823838
+*/
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -32,7 +38,7 @@ int main()
         // Strings para a linha de comando
         char cmdline[MAX_COMMAND_LINE];
 
-        char **argv = (char**)malloc(MAX_ARGV_SIZE*sizeof(char*));
+        char **argv = (char **)malloc(MAX_ARGV_SIZE * sizeof(char *));
         for (int i = 0; i < MAX_ARGV_SIZE; i++)
         {
             argv[i] = (char *)malloc(MAX_ARG_SIZE * sizeof(char));
@@ -102,7 +108,7 @@ int main()
 
         // Verificando comando exit
         if (strcmp(argv[0], "exit") == 0)
-        {   
+        {
             free(argv);
             break;
         }
@@ -246,23 +252,22 @@ int exec_command(int argc, char **argv, int redirectionIndex, int pipeIndex)
             close(fd);
         }
 
-        // Por problemas ao executar "sleep" pelo execvp, criou-se uma estrutura para sleep separadamente
-        if (issleep)
+        // Tirando o caracter de background
+        if(isbackground)
         {
-            sleep(atoi(argv[1]));
-            exit(0);
+            argv[argc - 1] = '\0';
         }
 
         // Executando processo filho sem pipe
         int erroExec = execvp(argv[0], argv);
         if (erroExec == -1)
         {
-            fprintf(stderr,"%s: No such file or directory\n", argv[0]);
+            fprintf(stderr, "%s: No such file or directory\n", argv[0]);
             exit(1);
         }
     }
-    else
-    {                     // Pai
+    else // Pai
+    {
         if (isbackground) // Chamada em background
         {
             signal(SIGCHLD, handler); // Define sua função de tratamento
