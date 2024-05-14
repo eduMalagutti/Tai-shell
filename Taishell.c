@@ -21,12 +21,20 @@
 #define MAX_COMMAND_LINE 50
 #define MAX_ARGV_SIZE 50
 #define MAX_ARG_SIZE 50
+#define MAX_HISTORY_SIZE 100
+#define MAX_COMMAND_LENGTH 1000
 
 // Declaração das funções
 int exec_command(int argc, char **argv, int redirectionIndex, int pipeIndex);
 void handler(int signal);
 int exec_pipe(int pipeIndex, int argc, char **argv);
 int exec_cd(char *argv, char * curdir ,char *lastdir);
+void add_history(const char* cmdline);
+void print_history();
+
+// Variáveis globais
+char history[MAX_HISTORY_SIZE][MAX_COMMAND_LENGTH];
+int history_count = 0;
 
 int main()
 {
@@ -85,6 +93,7 @@ int main()
 
         // Removendo caracter \n do final da linha
         cmdline[strlen(cmdline) - 1] = '\0';
+        add_history(cmdline);
 
         // Estrutura para criação de um vetor argv com todos os argumentos do comando lido.
         // argc é inicializado com 0
@@ -120,6 +129,13 @@ int main()
             continue;
         }
 
+        // Verificando se o comando é history
+        if(strcmp(argv[0], "history") == 0){
+            print_history();
+
+            continue;
+        }
+
         // Chamando função que cria um processo filho e executa o comando
         exec_command(argc, argv, redirectionIndex, pipeIndex);
 
@@ -137,8 +153,7 @@ int exec_command(int argc, char **argv, int redirectionIndex, int pipeIndex)
     char *outFile;
 
     // Variáveis de condição
-    int issleep, isbackground;
-    issleep = strcmp(argv[0], "sleep") == 0;
+    int isbackground;
     isbackground = strcmp(argv[argc - 1], "&") == 0;
 
     // Criando processo filho
@@ -186,7 +201,7 @@ int exec_command(int argc, char **argv, int redirectionIndex, int pipeIndex)
         int erroExec = execvp(argv[0], argv);
         if (erroExec == -1)
         {
-            fprintf(stderr, "%s: No such file or directory\n", argv[0]);
+            fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
             exit(1);
         }
     }
@@ -207,8 +222,7 @@ int exec_command(int argc, char **argv, int redirectionIndex, int pipeIndex)
 void handler(int signal)
 {
     int status;
-    while (waitpid(0, &status, WNOHANG) > 0)
-        ;
+    while (waitpid(0, &status, WNOHANG) > 0);
 }
 
 int exec_pipe(int pipeIndex, int argc, char **argv)
@@ -263,7 +277,7 @@ int exec_pipe(int pipeIndex, int argc, char **argv)
         int erroExec = execvp(argv2[0], argv2);
         if (erroExec == -1)
         {
-            perror("execvp");
+            fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
             exit(1);
         }
     }
@@ -279,7 +293,7 @@ int exec_pipe(int pipeIndex, int argc, char **argv)
         int erroExec = execvp(argv[0], argv);
         if (erroExec == -1)
         {
-            perror("execvp");
+            fprintf(stderr, "%s: %s\n", argv[0], strerror(errno));
             exit(1);
         }
     }
@@ -344,4 +358,20 @@ int exec_cd(char *argv, char * curdir, char *lastdir)
     strcpy(lastdir, curdir);
 
     return 0;
+}
+
+void add_history(const char* cmdline)
+{
+    if (history_count < MAX_HISTORY_SIZE) {
+        strcpy(history[history_count++], cmdline);
+    } else {
+        printf("Quantidade máxima atingida\n");
+        return;
+    }
+}
+
+void print_history(){
+    for(int i=0; i<history_count;i++){
+        printf("%s\n", history[i]);
+    }
 }
