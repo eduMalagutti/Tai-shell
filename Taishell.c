@@ -132,6 +132,7 @@ int main()
         // Verificando se o comando é history
         if(strcmp(argv[0], "history") == 0){
             print_history();
+
             continue;
         }
 
