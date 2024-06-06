@@ -9,5 +9,8 @@ A simple shell written in C for educational purposes in the Operating Systems di
 - `$ prog parameters &`: Program runs in the background.
 - `$ prog [parameters] > file`: Redirect output to a file using `dup2()`.
 - `$ prog1 / prog2`: Execute program with a pipe.
+## Aditional
+- `cd` bultin command
+- `exit` bultin command
 
 Created by [Eduardo Souza Malagutti](https://github.com/eduMalagutti) and [Vitor Taichi Taira](https://github.com/TaiFile) as an exercise in UFScar's Operating Systems course.
